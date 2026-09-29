@@ -1330,3 +1330,13 @@ Projet personnel d'analyse financière et quantitative orienté BRVM/UEMOA.
 BRVM-AI
 
 «Collecter. Comprendre. Tester. Modéliser. Analyser.»
+
+
+## Socle Python livré
+
+Le dépôt dispose maintenant d’un socle installable et vérifié pour la configuration, la qualité des données, les statistiques, les ratios fondamentaux et un backtest long-only sans look-ahead. Il ne contient pas de données BRVM réelles ni de collecteur actif.
+
+- Installation et variables d’environnement : [Guide du socle Python](documentation/socle_python.md)
+- Installer les dépendances de développement : `python -m pip install -e ".[dev]"`
+- Contrôler le code : `ruff check .`, `ruff format --check .`, `mypy src`, `pytest`
+- La CI GitHub Actions valide les changements Python; les workflows quotidien et hebdomadaire restent inactifs faute de source autorisée et de tâches de collecte réellement implémentées.
