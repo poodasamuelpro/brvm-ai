@@ -64,3 +64,22 @@ Les objets sont créés dans `brvm`, pas dans `public`. La migration n’accorde
 ## Prochaine évolution
 
 Les migrations suivantes ajouteront séparément les observations de marché, les faits fondamentaux, événements et validations qualité, puis les tables préparatoires d’analyses et d’exécutions. Ce premier lot ne rend opérationnelle aucune collecte, analyse, automatisation ni interface.
+
+
+## Lot 2 — observations financières et qualité
+
+- **DÉVELOPPÉ** — la migration `20260930000000_market_fundamentals_quality.sql` ajoute l’enregistrement brut par source, les barres de marché OHLCV, les sessions de calendrier, les périodes/faits fondamentaux, les opérations sur titres et anomalies qualité.
+- **PRÉPARÉ** — la fréquence de barres est stockée comme code source en texte libre normalisé en minuscules; la base n’invente pas de fréquence quotidienne ou intrajournalière. Des révisions et sources concurrentes peuvent être conservées via les références d’ingestion.
+- **NON IMPLÉMENTÉ** — aucune collecte, import, normalisation Python, validation automatique, calendrier officiel ou donnée BRVM n’est fourni dans ce lot.
+
+### Modèle ajouté
+
+`raw_ingest_record` garde la structure reçue et son statut de traitement. `market_bar`, `financial_fact`, `market_calendar_session` et `corporate_action` sont les représentations normalisées et rattachent chaque fait à son `data_source` et à un `raw_ingest_record`. Une clé de document source est accessible par cette chaîne de provenance. Les valeurs de prix, volumes et montants sont `numeric` à précision explicite; les compteurs de transactions sont entiers. Les contraintes valident l’ordre OHLC, les valeurs positives/non négatives, les dates, périodes et rapports de split lorsqu’ils existent.
+
+`financial_period` rattache les faits comptables à une société et à une période. Chaque fait porte un `metric_code`, unité, devise éventuelle, date de publication et date de disponibilité. Si `available_at` est inconnu, il reste `NULL` : une analyse point-in-time doit exclure ces faits ou signaler cette limite, jamais supposer qu’ils étaient connus à la clôture de période. `market_date` est la date locale du marché fournie par la source/calendrier, tandis que les heures techniques sont conservées en `timestamptz`.
+
+`data_quality_issue` localise un seul enregistrement brut, cours, fait fondamental ou corporate action par clé étrangère réelle. Il conserve code de règle, gravité, état et contexte JSONB borné; ce contexte ne doit contenir ni secrets, ni payload complet, ni valeurs sensibles inutiles. L’état qualité des enregistrements et les anomalies sont des champs de persistance, pas un validateur exécuté automatiquement.
+
+### Déploiement des migrations
+
+Pour une base encore vierge, appliquer **dans l’ordre** `20260929235900_initial_reference_and_provenance.sql`, puis `20260930000000_market_fundamentals_quality.sql`. Pour mettre à jour une base où le lot 1 est déjà installé, n’exécuter que la seconde migration après confirmation de son historique. Aucun changement Supabase n’a été exécuté à distance.
