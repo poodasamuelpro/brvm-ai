@@ -1,0 +1,34 @@
+# Secrets et configuration locale
+.env
+.env.*
+!.env.exemple
+*.pem
+*.key
+.secrets/
+credentials.json
+
+# Environnements Python et caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Paquetage / distributions
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Éditeurs et systèmes
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
