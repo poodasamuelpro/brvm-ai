@@ -83,3 +83,18 @@ Les migrations suivantes ajouteront séparément les observations de marché, le
 ### Déploiement des migrations
 
 Pour une base encore vierge, appliquer **dans l’ordre** `20260929235900_initial_reference_and_provenance.sql`, puis `20260930000000_market_fundamentals_quality.sql`. Pour mettre à jour une base où le lot 1 est déjà installé, n’exécuter que la seconde migration après confirmation de son historique. Aucun changement Supabase n’a été exécuté à distance.
+
+
+## Lot 3 — analyses, rétro-tests, ML et signaux
+
+- **DÉVELOPPÉ** — migration `20260930001000_analytics_models_backtests_signals.sql` : traçabilité de calcul, définitions et résultats versionnés d’indicateurs, résultats d’analyse reliés à des entrées sources, stratégies et versions, exécutions de rétro-tests, instruments/trades/métriques, versions de jeux de données et définitions de features/labels, échantillons, modèles/version, évaluations, prédictions/outcomes et signaux/facteurs explicatifs.
+- **PRÉPARÉ** — `calculation_run` conserve code_version, paramètres, cutoff `as_of`, empreinte d’entrée, statuts et erreurs non secrètes pour permettre la reproduction. Les liens d’entrée et de facteurs pointent aux cours, faits, opérations ou enregistrements bruts via clés étrangères.
+- **NON IMPLÉMENTÉ** — aucun indicateur SQL, algorithme de stratégie, simulation, pipeline d’entraînement, modèle, prédiction ou signal n’est exécuté par ces tables. Aucune définition ou donnée de modèle n’est seedée.
+
+Les définitions d’indicateurs et de stratégies ont des versions distinctes; modifier une formule implique d’enregistrer une nouvelle version plutôt que de réécrire les résultats passés. Les paramètres/hyperparamètres JSONB sont contraints à des objets. Les échantillons ML séparent les splits `train`, `validation`, `test` et `inference`; leurs features/labels conservent la représentation utile à la version du dataset. `sample_available_at` postérieur à l’instant de l’observation est rejeté pour éviter une fuite temporelle. L’appelant reste responsable de construire un dataset point-in-time sans survivorship bias.
+
+Les sorties utilisent des tables spécialisées avec relations typées lorsque le domaine est connu. Les tables de traces ont des clés étrangères vers les données réellement connues; aucune intégration d’un fournisseur ou d’un framework ML n’est supposée. Les URI d’artefacts restent facultatives et ne constituent pas une intégration Storage.
+
+### Ordre de déploiement à ce stade
+
+Sur une base vierge, appliquer les migrations `20260929235900_initial_reference_and_provenance.sql`, `20260930000000_market_fundamentals_quality.sql`, puis `20260930001000_analytics_models_backtests_signals.sql`. Si les deux premières sont déjà installées, appliquer uniquement la troisième après confirmation de leur historique.
