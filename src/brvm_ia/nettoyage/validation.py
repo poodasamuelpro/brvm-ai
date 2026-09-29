@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -82,6 +83,7 @@ def valider_donnees_marche(
     donnees: pd.DataFrame,
     *,
     date_reference: datetime | None = None,
+    dates_attendues: Iterable[datetime] | None = None,
     seuil_alerte_variation_absolue: float | None = None,
 ) -> RapportValidation:
     """Contrôle un DataFrame OHLCV attendu sans corriger silencieusement ses valeurs.
@@ -158,6 +160,44 @@ def valider_donnees_marche(
         message="Une cotation datée dans le futur ne peut pas être intégrée.",
         colonne="date",
     )
+    if dates_attendues is not None:
+        dates_calendrier = pd.DatetimeIndex(
+            pd.to_datetime(list(dates_attendues), format="mixed", errors="coerce", utc=True)
+        )
+        if (
+            len(dates_calendrier) == 0
+            or dates_calendrier.hasnans
+            or dates_calendrier.has_duplicates
+        ):
+            raise ValueError("Le calendrier fourni doit contenir des dates valides et uniques.")
+        hors_calendrier = dates.notna() & ~dates.isin(dates_calendrier)
+        _anomalies_masque(
+            anomalies,
+            hors_calendrier,
+            code="date_hors_frequence",
+            message="La date de cotation ne figure pas dans le calendrier attendu fourni.",
+            colonne="date",
+        )
+        dates_valides = dates.dropna()
+        if not dates_valides.empty:
+            debut, fin = dates_valides.min(), dates_valides.max()
+            calendrier_observe = dates_calendrier[
+                (dates_calendrier >= debut) & (dates_calendrier <= fin)
+            ]
+            ticker_propre = donnees["ticker"].astype("string").str.strip()
+            for symbole in ticker_propre.dropna().loc[lambda serie: serie.ne("")].unique():
+                observees = dates.loc[ticker_propre.eq(symbole)].dropna()
+                absentes_attendues = calendrier_observe.difference(pd.DatetimeIndex(observees))
+                anomalies.extend(
+                    AnomalieDonnee(
+                        "cotation_attendue_absente",
+                        f"Aucune cotation observée pour {symbole} le {date.isoformat()}; "
+                        "vérifier le calendrier et la source.",
+                        "avertissement",
+                        colonne="date",
+                    )
+                    for date in absentes_attendues
+                )
 
     numeriques: dict[str, Series[Any]] = {}
     for colonne in (*ColonnesPrix, "volume"):

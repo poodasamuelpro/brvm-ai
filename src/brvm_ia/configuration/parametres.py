@@ -62,6 +62,7 @@ class Parametres(BaseSettings):
     cle_api_ia: SecretStr | None = Field(None, validation_alias="CLE_API_IA")
     modele_ia: str | None = Field(None, validation_alias="MODELE_IA")
 
+    activer_api: bool = Field(False, validation_alias="ACTIVER_API")
     cle_secrete: SecretStr | None = Field(None, validation_alias="CLE_SECRETE")
 
     frequence_collecte_minutes: int = Field(
@@ -183,8 +184,8 @@ class Parametres(BaseSettings):
                 raise ValueError(
                     "EMAIL_UTILISATEUR et EMAIL_MOT_DE_PASSE doivent être définis ensemble."
                 )
-        if self.environnement == "production" and self.cle_secrete is None:
-            manquants.append("CLE_SECRETE (32 caractères minimum en production)")
+        if self.activer_api and self.cle_secrete is None:
+            manquants.append("CLE_SECRETE (32 caractères minimum lorsque l’API est activée)")
         if manquants:
             raise ValueError(
                 "Variables obligatoires pour les fonctionnalités activées: "

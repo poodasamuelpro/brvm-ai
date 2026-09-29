@@ -71,11 +71,17 @@ def test_telegram_actif_exige_token_et_chat_id(monkeypatch: pytest.MonkeyPatch) 
     assert "TELEGRAM_CHAT_ID" in str(capture.value)
 
 
-def test_parametre_production_exige_cle_forte(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ENVIRONNEMENT", "production")
+def test_api_active_exige_une_cle_secrete(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ACTIVER_API", "true")
 
     with pytest.raises(ErreurConfiguration, match="CLE_SECRETE"):
         charger_parametres()
+
+
+def test_production_sans_api_active_ne_requiert_pas_de_cle(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ENVIRONNEMENT", "production")
+
+    assert charger_parametres().cle_secrete is None
 
 
 def test_valeur_secrete_n_est_pas_affichee_dans_diagnostic(

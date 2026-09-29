@@ -118,6 +118,26 @@ def test_variation_extreme_est_alertee_sans_rejeter_le_lot() -> None:
     assert rapport.avertissements[0].code == "variation_extreme"
 
 
+def test_frequence_est_comparee_a_un_calendrier_fourni_sans_le_deviner() -> None:
+    donnees = _donnees_marche()
+    donnees.loc[1, "date"] = "2025-01-04T00:00:00Z"
+    calendrier = [
+        datetime(2025, 1, 2, tzinfo=UTC),
+        datetime(2025, 1, 3, tzinfo=UTC),
+        datetime(2025, 1, 4, tzinfo=UTC),
+    ]
+
+    rapport = valider_donnees_marche(
+        donnees,
+        date_reference=datetime(2025, 2, 1, tzinfo=UTC),
+        dates_attendues=calendrier,
+    )
+
+    assert rapport.est_valide
+    assert len(rapport.avertissements) == 1
+    assert rapport.avertissements[0].code == "cotation_attendue_absente"
+
+
 def test_seuil_variation_non_positif_est_refuse() -> None:
     with pytest.raises(ValueError, match="strictement positif"):
         valider_donnees_marche(_donnees_marche(), seuil_alerte_variation_absolue=0)

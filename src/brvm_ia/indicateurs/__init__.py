@@ -15,3 +15,17 @@ __all__ = [
     "rendements_simples",
     "volatilite_annualisee",
 ]
+
+from brvm_ia.indicateurs.fondamentaux import (
+    DonneesFondamentales,
+    RatiosFondamentaux,
+    calculer_croissance,
+    calculer_ratios_fondamentaux,
+)
+
+__all__ += [
+    "DonneesFondamentales",
+    "RatiosFondamentaux",
+    "calculer_croissance",
+    "calculer_ratios_fondamentaux",
+]
