@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import AnyHttpUrl, Field, SecretStr, ValidationError, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from brvm_ia.exceptions import ErreurConfiguration
 
@@ -56,6 +56,10 @@ class Parametres(BaseSettings):
     activer_telegram: bool = Field(False, validation_alias="ACTIVER_TELEGRAM")
     telegram_bot_token: SecretStr | None = Field(None, validation_alias="TELEGRAM_BOT_TOKEN")
     telegram_chat_id: str | None = Field(None, validation_alias="TELEGRAM_CHAT_ID")
+    telegram_admin_user_id: int | None = Field(None, validation_alias="TELEGRAM_ADMIN_USER_ID")
+    telegram_utilisateurs_autorises: Annotated[frozenset[int], NoDecode] = Field(
+        default_factory=frozenset, validation_alias="TELEGRAM_UTILISATEURS_AUTORISES"
+    )
 
     activer_ia: bool = Field(False, validation_alias="ACTIVER_IA")
     fournisseur_ia: str | None = Field(None, validation_alias="FOURNISSEUR_IA")
@@ -98,6 +102,26 @@ class Parametres(BaseSettings):
     @classmethod
     def nettoyer_chaine(cls, valeur: str | None) -> str | None:
         return valeur.strip() if valeur is not None else None
+
+    @field_validator("telegram_utilisateurs_autorises", mode="before")
+    @classmethod
+    def analyser_utilisateurs_autorises(cls, valeur: object) -> object:
+        """Accepte une liste d'identifiants Telegram séparés par des virgules."""
+        if valeur is None or isinstance(valeur, frozenset | set | list | tuple):
+            return valeur
+        if isinstance(valeur, str):
+            if not valeur.strip():
+                return frozenset()
+            try:
+                return frozenset(
+                    int(partie.strip()) for partie in valeur.split(",") if partie.strip()
+                )
+            except ValueError as erreur:
+                raise ValueError(
+                    "TELEGRAM_UTILISATEURS_AUTORISES doit contenir des identifiants "
+                    "numériques séparés par des virgules."
+                ) from erreur
+        return valeur
 
     @field_validator("base_de_donnees_url")
     @classmethod
@@ -153,10 +177,7 @@ class Parametres(BaseSettings):
             ),
             (
                 self.activer_telegram,
-                (
-                    ("TELEGRAM_BOT_TOKEN", self.telegram_bot_token),
-                    ("TELEGRAM_CHAT_ID", self.telegram_chat_id),
-                ),
+                (("TELEGRAM_BOT_TOKEN", self.telegram_bot_token),),
             ),
             (
                 self.activer_ia,

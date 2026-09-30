@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -61,14 +62,34 @@ def test_integration_desactivee_ne_requiert_pas_de_secrets() -> None:
     assert parametres.base_de_donnees_url is None
 
 
-def test_telegram_actif_exige_token_et_chat_id(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_telegram_actif_exige_token(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Isolé d'un éventuel .env local (avec un vrai jeton) via un cwd sans .env.
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("ACTIVER_TELEGRAM", "true")
 
     with pytest.raises(ErreurConfiguration) as capture:
         charger_parametres()
 
     assert "TELEGRAM_BOT_TOKEN" in str(capture.value)
-    assert "TELEGRAM_CHAT_ID" in str(capture.value)
+
+
+def test_telegram_utilisateurs_autorises_parse_les_identifiants(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TELEGRAM_UTILISATEURS_AUTORISES", "111, 222,333")
+
+    parametres = charger_parametres()
+
+    assert parametres.telegram_utilisateurs_autorises == frozenset({111, 222, 333})
+
+
+def test_telegram_utilisateurs_autorises_invalide_est_rejete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TELEGRAM_UTILISATEURS_AUTORISES", "abc")
+
+    with pytest.raises(ErreurConfiguration, match="TELEGRAM_UTILISATEURS_AUTORISES"):
+        charger_parametres()
 
 
 def test_api_active_exige_une_cle_secrete(monkeypatch: pytest.MonkeyPatch) -> None:

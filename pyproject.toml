@@ -23,6 +23,7 @@ dev = [
   "mypy>=1.11,<2",
   "pandas-stubs>=2.2.3.250308",
   "pytest>=8.3,<9",
+  "pytest-asyncio>=0.24,<1",
   "pytest-cov>=5,<7",
   "ruff>=0.9,<1",
 ]
@@ -31,6 +32,7 @@ machine-learning = ["scikit-learn>=1.5,<2"]
 boosting = ["lightgbm>=4,<5", "xgboost>=2,<4"]
 database = ["alembic>=1.13,<2", "psycopg[binary]>=3.2,<4", "sqlalchemy>=2,<3"]
 api = ["fastapi>=0.115,<1", "httpx>=0.27,<1", "uvicorn[standard]>=0.30,<1"]
+telegram = ["python-telegram-bot>=21,<22"]
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -41,6 +43,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers --strict-config"
+asyncio_mode = "auto"
 
 [tool.ruff]
 target-version = "py312"
