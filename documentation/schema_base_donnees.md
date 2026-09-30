@@ -120,3 +120,13 @@ Sur une base vierge, ajouter ensuite `20260930002000_operations_users_notificati
 Les erreurs persistées doivent contenir un code et un résumé expurgé, jamais un traceback brut, URL de connexion, jeton ou payload inutile. Les arguments/résultats d’outils et contextes d’audit sont également destinés aux métadonnées minimales seulement. Les messages de conversation peuvent contenir des informations privées : définir consentement, durée de conservation, effacement et RLS avant toute collecte réelle. L’utilisateur Supabase Auth n’est pas lié à `brvm.app_user` par clé étrangère tant que le modèle d’authentification n’est pas configuré et validé.
 
 Sur une base vierge, ajouter ensuite `20260930002000_operations_users_notifications_conversations.sql` après les trois migrations précédentes.
+
+
+## Lot 5 — connecteur Python PostgreSQL
+
+- **DÉVELOPPÉ** — `GestionnaireBaseDeDonnees` initialise SQLAlchemy uniquement lorsque `ACTIVER_BASE_DE_DONNEES=true`; le driver est psycopg 3, les connexions sont paresseuses, les sessions transactionnelles et les erreurs sont expurgées. `DepotDonneesPostgres` lit les barres et faits fondamentaux validés, via SQL paramétré, avec plage incluse et option `as_of` timezone-aware.
+- **DÉPENDANCE** — installer l’extra `database` du projet; il comprend SQLAlchemy 2, psycopg 3 et Alembic. L’accès reste désactivé par défaut.
+- **À CONFIGURER MANUELLEMENT** — copier l’URL PostgreSQL depuis les paramètres de connexion du projet Supabase dans une variable secrète `BASE_DE_DONNEES_URL`; puis activer `ACTIVER_BASE_DE_DONNEES=true`. Ne pas mettre cette URL dans Git, les logs, les arguments de ligne de commande ou un message. Choisir le mode/endpoint selon les recommandations du dashboard Supabase pour le runtime concerné.
+- **NON EFFECTUÉ** — aucune connexion réseau, vérification `SELECT 1`, migration distante, import, écriture ou donnée utilisateur n’a été effectuée.
+
+Le gestionnaire ne contacte pas PostgreSQL lors de sa création; `verifier_connexion()` est un contrôle explicite. `session()` commit si le bloc réussit et rollback si une exception survient. Fermer le gestionnaire à l’arrêt du processus. Le pool est petit et pré-vérifie les connexions; il ne remplace pas les limites de connexions ou recommandations du plan Supabase. Les dépôts lisent exclusivement `validation_status='validated'`. Avec `as_of`, les faits fondamentaux sans `available_at` sont exclus et les observations acquises/publiées après le cutoff sont filtrées. Aucun dépôt d’écriture ni collecteur n’est activé par ce lot.
