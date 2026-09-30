@@ -98,3 +98,25 @@ Les sorties utilisent des tables spécialisées avec relations typées lorsque l
 ### Ordre de déploiement à ce stade
 
 Sur une base vierge, appliquer les migrations `20260929235900_initial_reference_and_provenance.sql`, `20260930000000_market_fundamentals_quality.sql`, puis `20260930001000_analytics_models_backtests_signals.sql`. Si les deux premières sont déjà installées, appliquer uniquement la troisième après confirmation de leur historique.
+
+
+## Lot 4 — exploitation, utilisateurs et échanges futurs
+
+- **DÉVELOPPÉ** — migration `20260930002000_operations_users_notifications_conversations.sql` : définitions et runs de pipeline, sous-étapes/tentatives, sources et erreurs sûres; profils et préférences; règles/événements d’alerte et journal d’envoi; conversations/messages/appels d’outils et références explicites aux analyses; journal d’audit.
+- **PRÉPARÉ** — le profil conserve seulement un `auth_subject` optionnel; les credentials SMTP, Telegram, IA et Supabase doivent rester en gestion de secrets applicative. Les statuts de pipeline et notification, compteurs, dates et messages d’erreur non sensibles permettent un futur suivi sans prétendre envoyer ou planifier.
+- **NON IMPLÉMENTÉ** — aucun ordonnanceur, exécuteur de pipeline, système d’alertes, courriel, bot Telegram, agent, authentification Supabase ou politique d’accès par utilisateur n’est livré. Les tables de conversation ne sont pas une promesse d’agent opérationnel.
+
+Les erreurs persistées doivent contenir un code et un résumé expurgé, jamais un traceback brut, URL de connexion, jeton ou payload inutile. Les arguments/résultats d’outils et contextes d’audit sont également destinés aux métadonnées minimales seulement. Les messages de conversation peuvent contenir des informations privées : définir consentement, durée de conservation, effacement et RLS avant toute collecte réelle. L’utilisateur Supabase Auth n’est pas lié à `brvm.app_user` par clé étrangère tant que le modèle d’authentification n’est pas configuré et validé.
+
+Sur une base vierge, ajouter ensuite `20260930002000_operations_users_notifications_conversations.sql` après les trois migrations précédentes.
+
+
+## Lot 4 — exploitation, utilisateurs et échanges futurs
+
+- **DÉVELOPPÉ** — migration `20260930002000_operations_users_notifications_conversations.sql` : définitions et runs de pipeline, sous-étapes/tentatives, sources et erreurs sûres; profils et préférences; règles/événements d’alerte et journal d’envoi; conversations/messages/appels d’outils et références explicites aux analyses; journal d’audit.
+- **PRÉPARÉ** — le profil conserve seulement un `auth_subject` optionnel; les credentials SMTP, Telegram, IA et Supabase doivent rester en gestion de secrets applicative. Les statuts de pipeline et notification, compteurs, dates et messages d’erreur non sensibles permettent un futur suivi sans prétendre envoyer ou planifier.
+- **NON IMPLÉMENTÉ** — aucun ordonnanceur, exécuteur de pipeline, système d’alertes, courriel, bot Telegram, agent, authentification Supabase ou politique d’accès par utilisateur n’est livré. Les tables de conversation ne sont pas une promesse d’agent opérationnel.
+
+Les erreurs persistées doivent contenir un code et un résumé expurgé, jamais un traceback brut, URL de connexion, jeton ou payload inutile. Les arguments/résultats d’outils et contextes d’audit sont également destinés aux métadonnées minimales seulement. Les messages de conversation peuvent contenir des informations privées : définir consentement, durée de conservation, effacement et RLS avant toute collecte réelle. L’utilisateur Supabase Auth n’est pas lié à `brvm.app_user` par clé étrangère tant que le modèle d’authentification n’est pas configuré et validé.
+
+Sur une base vierge, ajouter ensuite `20260930002000_operations_users_notifications_conversations.sql` après les trois migrations précédentes.
