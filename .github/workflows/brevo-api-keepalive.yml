@@ -1,0 +1,49 @@
+name: Brevo API keep-alive
+
+on:
+  schedule:
+    - cron: "0 9 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: brevo-api-keepalive
+  cancel-in-progress: false
+
+jobs:
+  api-keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+    steps:
+      - name: Vérifier le secret
+        id: check
+        shell: bash
+        run: |
+          if [ -z "$BREVO_API_KEY" ]; then
+            echo "Secret API absent : rien à faire."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Envoyer l'e-mail de test (API)
+        if: steps.check.outputs.run == 'true'
+        env:
+          PROJECT_NAME: "BRVM AI"
+          MAIL_TO: "speedconnectouaga@gmail.com"
+          MAIL_CC: "theyoung0910@gmail.com"
+          MAIL_FROM: ${{ vars.BREVO_SENDER_EMAIL || 'speedconnectouaga@gmail.com' }}
+        shell: bash
+        run: |
+          payload=$(jq -n \
+            --arg name "$PROJECT_NAME" --arg from "$MAIL_FROM" \
+            --arg to "$MAIL_TO" --arg cc "$MAIL_CC" \
+            '{sender:{name:$name,email:$from},to:[{email:$to}],cc:[{email:$cc}], subject:("Keep-alive API Brevo - "+$name), textContent:"E-mail mensuel automatique pour garder la clé API Brevo active."}')
+          curl --fail-with-body -sS -X POST "https://api.brevo.com/v3/smtp/email" \
+            -H "api-key: $BREVO_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$payload"

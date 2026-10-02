@@ -1,0 +1,57 @@
+name: Brevo SMTP keep-alive
+
+on:
+  schedule:
+    - cron: "0 8 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: brevo-smtp-keepalive
+  cancel-in-progress: false
+
+jobs:
+  smtp-keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BREVO_SMTP_LOGIN: ${{ secrets.BREVO_SMTP_LOGIN }}
+      BREVO_SMTP_KEY: ${{ secrets.BREVO_SMTP_KEY }}
+    steps:
+      - name: Vérifier les secrets
+        id: check
+        shell: bash
+        run: |
+          if [ -z "$BREVO_SMTP_LOGIN" ] || [ -z "$BREVO_SMTP_KEY" ]; then
+            echo "Secrets SMTP absents : rien à faire."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Envoyer l'e-mail de test (SMTP)
+        if: steps.check.outputs.run == 'true'
+        env:
+          PROJECT_NAME: "BRVM AI"
+          MAIL_TO: "speedconnectouaga@gmail.com"
+          MAIL_CC: "theyoung0910@gmail.com"
+          MAIL_FROM: ${{ vars.BREVO_SENDER_EMAIL || 'speedconnectouaga@gmail.com' }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, smtplib
+          from email.message import EmailMessage
+          msg = EmailMessage()
+          msg["Subject"] = "Keep-alive SMTP Brevo - " + os.environ["PROJECT_NAME"]
+          msg["From"] = os.environ["MAIL_FROM"]
+          msg["To"] = os.environ["MAIL_TO"]
+          msg["Cc"] = os.environ["MAIL_CC"]
+          msg.set_content("E-mail mensuel automatique pour garder la clé SMTP Brevo active.")
+          with smtplib.SMTP("smtp-relay.brevo.com", 587, timeout=30) as s:
+              s.starttls()
+              s.login(os.environ["BREVO_SMTP_LOGIN"], os.environ["BREVO_SMTP_KEY"])
+              s.send_message(msg)
+          print("E-mail SMTP envoyé.")
+          PY
