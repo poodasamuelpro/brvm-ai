@@ -14,6 +14,7 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from html.parser import HTMLParser
 from typing import Any
 
 from brvm_ia.exceptions import ErreurCollecte, ErreurValidationDonnees
@@ -24,6 +25,16 @@ CODE_SOURCE_SIKA = "SIKA_FINANCE"
 XPERIOD_JOURNALIER = "D"
 MAX_JOURS_REQUETE = 92
 AGENT_UTILISATEUR = "BRVM-AI-collecteur/0.1 (+https://github.com/poodasamuelpro/brvm-ai)"
+ENTETES_PAGE = (
+    "Date",
+    "Clôture",
+    "Plus bas",
+    "Plus haut",
+    "Ouverture",
+    "Volume Titres",
+    "Volume FCFA",
+    "Variation %",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +52,41 @@ class BarreHistoriqueSIKA:
     variation_pct: Decimal | None
 
 
+class _TableHistorique(HTMLParser):
+    """Extrait uniquement le tableau historique dont l’en-tête est contractuel."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.tables: list[list[list[str]]] = []
+        self._depth = 0
+        self._row: list[str] | None = None
+        self._cell: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "table":
+            self._depth += 1
+            self.tables.append([])
+        elif tag == "tr" and self._depth:
+            self._row = []
+        elif tag in {"th", "td"} and self._row is not None:
+            self._cell = []
+
+    def handle_data(self, data: str) -> None:
+        if self._cell is not None:
+            self._cell.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"th", "td"} and self._cell is not None and self._row is not None:
+            self._row.append(" ".join("".join(self._cell).split()))
+            self._cell = None
+        elif tag == "tr" and self._row is not None:
+            if self._row:
+                self.tables[-1].append(self._row)
+            self._row = None
+        elif tag == "table" and self._depth:
+            self._depth -= 1
+
+
 def _valeur(objet: dict[str, Any], *noms: str) -> Any:
     for nom in noms:
         if nom in objet and objet[nom] not in (None, ""):
@@ -50,7 +96,7 @@ def _valeur(objet: dict[str, Any], *noms: str) -> Any:
 
 def _decimal(valeur: Any, champ: str, *, entier: bool = False) -> Decimal:
     texte = str(valeur).strip().replace("\u202f", "").replace("\xa0", "")
-    texte = texte.replace(" ", "").replace(",", ".").replace("%", "")
+    texte = texte.replace(" ", "").replace("\\", "").replace(",", ".").replace("%", "")
     try:
         resultat = Decimal(texte)
     except (InvalidOperation, ValueError) as erreur:
@@ -95,22 +141,28 @@ def analyser_reponse(reponse: Any, ticker_sika: str) -> tuple[BarreHistoriqueSIK
         if jour in vues:
             raise ErreurValidationDonnees(f"Doublon SIKA pour {ticker_sika} le {jour}.")
         vues.add(jour)
-        ouverture = _decimal(_valeur(ligne, "open", "Open", "ouverture"), "ouverture")
-        plus_haut = _decimal(_valeur(ligne, "high", "High", "plus_haut", "haut"), "plus haut")
-        plus_bas = _decimal(_valeur(ligne, "low", "Low", "plus_bas", "bas"), "plus bas")
-        cloture = _decimal(_valeur(ligne, "close", "Close", "cloture", "closing"), "clôture")
+        ouverture = _decimal(_valeur(ligne, "open", "Open", "ouverture", "Ouverture"), "ouverture")
+        plus_haut = _decimal(
+            _valeur(ligne, "high", "High", "plus_haut", "haut", "Plus haut"), "plus haut"
+        )
+        plus_bas = _decimal(_valeur(ligne, "low", "Low", "plus_bas", "bas", "Plus bas"), "plus bas")
+        cloture = _decimal(
+            _valeur(ligne, "close", "Close", "cloture", "closing", "Clôture"), "clôture"
+        )
         volume = _decimal(
-            _valeur(ligne, "volume", "Volume", "volume_titres"), "volume", entier=True
+            _valeur(ligne, "volume", "Volume", "volume_titres", "Volume Titres"),
+            "volume",
+            entier=True,
         )
         if not (plus_bas <= ouverture <= plus_haut and plus_bas <= cloture <= plus_haut):
             raise ErreurValidationDonnees(f"OHLC incohérent dans la ligne SIKA du {jour}.")
         volume_fcfa = None
-        for nom in ("volume_fcfa", "VolumeFCFA", "value", "traded_value"):
+        for nom in ("volume_fcfa", "VolumeFCFA", "value", "traded_value", "Volume FCFA"):
             if nom in ligne and ligne[nom] not in (None, ""):
                 volume_fcfa = _decimal(ligne[nom], "volume FCFA")
                 break
         variation = None
-        for nom in ("variation", "Variation", "variation_pct"):
+        for nom in ("variation", "Variation", "variation_pct", "Variation %"):
             if nom in ligne and ligne[nom] not in (None, ""):
                 variation = _decimal(ligne[nom], "variation")
                 break
@@ -128,6 +180,47 @@ def analyser_reponse(reponse: Any, ticker_sika: str) -> tuple[BarreHistoriqueSIK
             )
         )
     return tuple(sorted(lignes, key=lambda ligne: ligne.date_seance))
+
+
+def analyser_page_html(html: str, ticker_sika: str) -> tuple[BarreHistoriqueSIKA, ...]:
+    """Analyse le tableau public SIKA; échoue si sa structure change."""
+    extracteur = _TableHistorique()
+    extracteur.feed(html)
+    table = next(
+        (table for table in extracteur.tables if table and tuple(table[0]) == ENTETES_PAGE),
+        None,
+    )
+    if table is None:
+        raise ErreurCollecte(
+            "Tableau historique SIKA introuvable : structure ou accès de la page modifié."
+        )
+    lignes = [dict(zip(ENTETES_PAGE, row, strict=True)) for row in table[1:]]
+    if not lignes:
+        raise ErreurCollecte("Page historique SIKA vide; aucune donnée enregistrée.")
+    return analyser_reponse(lignes, ticker_sika)
+
+
+def recuperer_page_historique(
+    ticker_sika: str, *, timeout_secondes: float = 30.0
+) -> tuple[BarreHistoriqueSIKA, ...]:
+    """Récupère la page publique SIKA sans contourner CAPTCHA/Cloudflare."""
+    url = URL_PAGE_HISTORIQUES.format(ticker=ticker_sika)
+    requete = urllib.request.Request(url, headers={"User-Agent": AGENT_UTILISATEUR})
+    try:
+        with urllib.request.urlopen(requete, timeout=timeout_secondes) as reponse:
+            if reponse.status != 200:
+                raise ErreurCollecte(f"Page historique SIKA HTTP {reponse.status}.")
+            contenu = reponse.read()
+            encodage = reponse.headers.get_content_charset() or "utf-8"
+    except urllib.error.HTTPError as erreur:
+        raise ErreurCollecte(
+            f"Page historique SIKA inaccessible (HTTP {erreur.code}); aucun contournement."
+        ) from None
+    except (urllib.error.URLError, TimeoutError, OSError) as erreur:
+        raise ErreurCollecte(
+            f"Page historique SIKA inaccessible ({type(erreur).__name__})."
+        ) from None
+    return analyser_page_html(contenu.decode(encodage, errors="strict"), ticker_sika)
 
 
 def recuperer_historique(
@@ -170,9 +263,7 @@ def recuperer_historique(
                 f"Ticker SIKA inconnu ou sans historique: {ticker_sika}."
             ) from None
         if erreur.code in {401, 403}:
-            raise ErreurCollecte(
-                "SIKA Finance bloque actuellement la collecte automatisée (HTTP 403/401)."
-            ) from None
+            return recuperer_page_historique(ticker_sika, timeout_secondes=timeout_secondes)
         raise ErreurCollecte(f"SIKA Finance a répondu HTTP {erreur.code}.") from None
     except (urllib.error.URLError, TimeoutError, OSError) as erreur:
         raise ErreurCollecte(f"Accès SIKA Finance impossible ({type(erreur).__name__}).") from None
