@@ -87,6 +87,10 @@ class PipelineCoursBRVM:
                 e=identifiant_externe,
             )
             if existant is not None:
+                # Jour sans nouvelle séance (week-end, férié) ou relance : aucune écriture
+                # de données, mais l’exécution est tracée comme réussie sans effet.
+                run_id = self._demarrer_run(session, date_seance.isoformat(), page)
+                self._terminer_run(session, run_id, "succeeded", len(resultats), 0, None)
                 return BilanCollecte(
                     date_seance.isoformat(), True, len(resultats), 0, 0, 0, 0, 0, existant
                 )
@@ -124,17 +128,8 @@ class PipelineCoursBRVM:
                     session, resultat, page, source_id, document_id, marche_id, compteurs
                 )
 
-            self._executer(
-                session,
-                """
-                UPDATE brvm.pipeline_run
-                SET run_status = 'succeeded', finished_at = clock_timestamp(),
-                    rows_processed = :p, rows_rejected = :j
-                WHERE pipeline_run_id = :r
-                """,
-                p=len(resultats),
-                j=compteurs["rejetees"],
-                r=run_id,
+            self._terminer_run(
+                session, run_id, "succeeded", len(resultats), compteurs["rejetees"], None
             )
 
         return BilanCollecte(
@@ -362,8 +357,64 @@ class PipelineCoursBRVM:
         )
         return security_id, True
 
-    def _demarrer_run(self, session: Session, date_seance: str, page: PageCoursActions) -> UUID:
-        definition_id = self._identifiant(
+    def journaliser_interruption(
+        self, statut: str, code_erreur: str, resume: str, parametres: dict[str, Any]
+    ) -> None:
+        """Trace dans une transaction distincte une exécution échouée ou annulée.
+
+        `resume` doit être un message sûr (aucune URL de connexion ni donnée brute).
+        """
+        if statut not in {"failed", "cancelled"}:
+            raise ValueError("Statut d’interruption non autorisé.")
+        with self._gestionnaire.session() as session:
+            run_id = self._identifiant(
+                session,
+                """
+                INSERT INTO brvm.pipeline_run
+                    (pipeline_definition_id, run_status, parameters, started_at)
+                VALUES (:d, 'running', CAST(:p AS jsonb), clock_timestamp())
+                RETURNING pipeline_run_id
+                """,
+                d=self._assurer_definition(session),
+                p=json.dumps(parametres, ensure_ascii=False),
+            )
+            self._executer(
+                session,
+                "INSERT INTO brvm.pipeline_run_error (pipeline_run_id, error_code, error_type, "
+                "safe_summary) VALUES (:r, :c, :t, :s)",
+                r=run_id,
+                c=code_erreur,
+                t=statut,
+                s=resume,
+            )
+            self._terminer_run(session, run_id, statut, 0, 0, resume)
+
+    def _terminer_run(
+        self,
+        session: Session,
+        run_id: UUID,
+        statut: str,
+        lignes: int,
+        rejets: int,
+        resume: str | None,
+    ) -> None:
+        self._executer(
+            session,
+            """
+            UPDATE brvm.pipeline_run
+            SET run_status = :st, finished_at = clock_timestamp(),
+                rows_processed = :p, rows_rejected = :j, safe_error_summary = :e
+            WHERE pipeline_run_id = :r
+            """,
+            st=statut,
+            p=lignes,
+            j=rejets,
+            e=resume,
+            r=run_id,
+        )
+
+    def _assurer_definition(self, session: Session) -> UUID:
+        return self._identifiant(
             session,
             """
             INSERT INTO brvm.pipeline_definition (code, version, description, is_enabled)
@@ -374,6 +425,9 @@ class PipelineCoursBRVM:
             c=CODE_PIPELINE,
             v=VERSION_PIPELINE,
         )
+
+    def _demarrer_run(self, session: Session, date_seance: str, page: PageCoursActions) -> UUID:
+        definition_id = self._assurer_definition(session)
         return self._identifiant(
             session,
             """
