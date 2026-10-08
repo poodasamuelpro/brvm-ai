@@ -2,22 +2,24 @@
 
 Dernière mise à jour : 2026-10-08 (UTC)
 
-Configuration utilisée par **GitHub Actions** : dépôt → **Settings → Secrets and variables → Actions**. Les valeurs secrètes ne sont volontairement pas inscrites dans ce document ni dans Git.
+## Statut du projet
 
-| Nom | Type GitHub | État | À faire |
-|---|---|---|---|
-| `BREVO_API_KEY` | Secret | **FAUX / placeholder** | Remplacer par la clé API Brevo réelle |
-| `BREVO_SMTP_LOGIN` | Secret | **FAUX / placeholder** | Remplacer par le login SMTP Brevo réel |
-| `BREVO_SMTP_KEY` | Secret | **FAUX / placeholder** | Remplacer par la clé SMTP Brevo réelle |
-| `BREVO_SENDER_EMAIL` | Variable facultative | **FAUX / placeholder** | Mettre une adresse expéditeur vérifiée, ou supprimer la variable pour utiliser le repli du workflow |
+**EN CONSTRUCTION — projet personnel; pas de configuration SMTP requise.** Aucun identifiant Brevo SMTP n’est configuré. Les placeholders API/SMTP et l’adresse expéditeur factice ont été retirés pour que les workflows ignorent l’envoi tant que le projet n’est pas prêt.
 
-**Repli expéditeur codé dans le workflow :** `speedconnectouaga@gmail.com`.
+| Élément GitHub Actions | État actuel | À faire |
+|---|---|---|
+| `BREVO_API_KEY` | Non configurée | Ajouter une clé API Brevo valide seulement lorsqu’une fonction e-mail doit être activée |
+| `BREVO_SMTP_LOGIN` | Non configuré | Non requis : pas de SMTP |
+| `BREVO_SMTP_KEY` | Non configurée | Non requis : pas de SMTP |
+| `BREVO_SENDER_EMAIL` | Variable factice supprimée | Repli du workflow utilisé; choisir une adresse vérifiée lors de l’activation de l’envoi |
 
-**Destinataires codés dans le workflow :** `MAIL_TO=speedconnectouaga@gmail.com`, `MAIL_CC=theyoung0910@gmail.com`. Ils ne sont pas à ajouter dans les paramètres Actions.
+La clé candidate examinée dans la conversation ne peut pas être associée à un compte ou à un projet : elle est incomplète selon le format attendu et l’API Brevo répond HTTP 401. Elle n’a donc pas été enregistrée ni réutilisée. Aucune clé d’un autre dépôt n’a été copiée ici.
 
 ## Historique
 
-- 2026-10-08 : les quatre entrées Actions ont été créées avec des valeurs factices pour préparer leur remplacement. Aucun workflow n’a été lancé.
-- 2026-10-08 : création de ce document de suivi à la racine du dépôt.
+- 2026-10-08 : confirmé comme projet personnel en cours de construction; pas de besoin SMTP.
+- 2026-10-08 : placeholders `BREVO_API_KEY`, `BREVO_SMTP_LOGIN`, `BREVO_SMTP_KEY` et `BREVO_SENDER_EMAIL` retirés.
+- 2026-10-08 : clé candidate testée en lecture seule, réponse HTTP 401 et format incomplet; non enregistrée.
+- Aucun workflow ni e-mail n’a été lancé.
 
-**Sécurité :** remplacer les placeholders dans GitHub Actions; ne jamais coller les vraies clés dans ce fichier, le code ou Git.
+À réévaluer lorsque le projet sera prêt à envoyer des courriels par API.
