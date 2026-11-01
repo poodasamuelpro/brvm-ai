@@ -3,10 +3,13 @@
 Exemple:
     ACTIVER_BASE_DE_DONNEES=true BASE_DE_DONNEES_URL=... \
     python scripts/lancer_historique_sika.py --ticker SNTS.sn \
+      --mapping SNTS.sn=SNTS \
       --debut 2026-07-01 --fin 2026-10-02
 
 L'URL de base est uniquement lue depuis l'environnement/.env et n'est jamais
 écrite dans Git ni dans les journaux.
+Une correspondance explicite est requise pour une nouvelle paire fournisseur/titre;
+le script ne déduit plus le titre BRVM depuis le nom du ticker.
 """
 
 from __future__ import annotations
@@ -22,6 +25,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from sqlalchemy import text  # noqa: E402
 
+from brvm_ia.base_de_donnees.correspondances import (  # noqa: E402
+    enregistrer_correspondance,
+    resoudre_correspondance,
+)
 from brvm_ia.base_de_donnees.moteur import GestionnaireBaseDeDonnees  # noqa: E402
 from brvm_ia.collecte.sources.sika_finance import (  # noqa: E402
     CODE_SOURCE_SIKA,
@@ -49,7 +56,7 @@ def _json_barre(barre: BarreHistoriqueSIKA) -> dict[str, str | None]:
     }
 
 
-def enregistrer(ticker: str, debut: date, fin: date) -> tuple[int, int]:
+def enregistrer(ticker: str, debut: date, fin: date, brvm_symbol: str | None) -> tuple[int, int]:
     barres = recuperer_historique(ticker, debut, fin)
     if not barres:
         return 0, 0
@@ -59,8 +66,6 @@ def enregistrer(ticker: str, debut: date, fin: date) -> tuple[int, int]:
         json.dumps(representation, ensure_ascii=False, sort_keys=True).encode()
     ).hexdigest()
     identifiant = f"{ticker}:{debut.isoformat()}:{fin.isoformat()}:{empreinte}"
-    symbole = ticker.split(".", 1)[0]
-
     with (
         GestionnaireBaseDeDonnees(obtenir_parametres()) as gestionnaire,
         gestionnaire.session() as session,
@@ -142,17 +147,39 @@ def enregistrer(ticker: str, debut: date, fin: date) -> tuple[int, int]:
             ),
             {"run": run_id, "source": source_id, "doc": document_id},
         )
-        security_id = session.execute(
-            text(
-                """SELECT ss.security_id FROM brvm.security_symbol_history ss
-                    JOIN brvm.security s ON s.security_id=ss.security_id
-                        AND s.market_id=ss.market_id
-                    WHERE ss.symbol=:symbol ORDER BY ss.valid_from DESC LIMIT 1"""
-            ),
-            {"symbol": symbole},
-        ).scalar_one_or_none()
+        if brvm_symbol:
+            security_id = session.execute(
+                text(
+                    """SELECT ss.security_id FROM brvm.security_symbol_history ss
+                        WHERE ss.symbol=:symbol ORDER BY ss.valid_from DESC LIMIT 1"""
+                ),
+                {"symbol": brvm_symbol},
+            ).scalar_one_or_none()
+            if security_id is None:
+                raise RuntimeError(f"Symbole BRVM introuvable ou non vérifié : {brvm_symbol}.")
+            enregistrer_correspondance(
+                session,
+                security_id=security_id,
+                source_id=source_id,
+                identifier_type="ticker",
+                identifier=ticker,
+                source_document_id=document_id,
+                verification_status="verified",
+                notes=f"Correspondance explicite fournie pour {brvm_symbol}.",
+            )
+        else:
+            security_id = resoudre_correspondance(
+                session,
+                source_id=source_id,
+                identifier_type="ticker",
+                identifier=ticker,
+                date_observation=debut,
+            )
         if security_id is None:
-            raise RuntimeError(f"Correspondance BRVM non vérifiée pour {ticker}.")
+            raise RuntimeError(
+                f"Correspondance BRVM non vérifiée pour {ticker}. "
+                "Fournir --mapping TICKER=SYMBOLE ou enregistrer une correspondance vérifiée."
+            )
         inserted = 0
         for barre in barres:
             payload = _json_barre(barre)
@@ -223,10 +250,23 @@ def enregistrer(ticker: str, debut: date, fin: date) -> tuple[int, int]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ticker", action="append", required=True)
+    parser.add_argument(
+        "--mapping",
+        action="append",
+        default=[],
+        metavar="TICKER=SYMBOLE",
+        help="Correspondance explicite, par exemple SNTS.sn=SNTS.",
+    )
     parser.add_argument("--debut", type=date.fromisoformat, required=True)
     parser.add_argument("--fin", type=date.fromisoformat, required=True)
     args = parser.parse_args()
-    total = [enregistrer(ticker, args.debut, args.fin) for ticker in args.ticker]
+    mappings: dict[str, str] = {}
+    for valeur in args.mapping:
+        ticker, separator, symbole = valeur.partition("=")
+        if not separator or not ticker.strip() or not symbole.strip():
+            parser.error("--mapping doit respecter la forme TICKER=SYMBOLE.")
+        mappings[ticker.strip()] = symbole.strip()
+    total = [enregistrer(ticker, args.debut, args.fin, mappings.get(ticker)) for ticker in args.ticker]
     print(f"SIKA: {sum(x[0] for x in total)} lignes validées, {sum(x[1] for x in total)} insérées.")
     return 0
 
