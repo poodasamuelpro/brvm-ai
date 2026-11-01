@@ -1,0 +1,40 @@
+name: Collecte quotidienne BRVM
+
+on:
+  schedule:
+    # Après la publication habituelle des cours de fin de séance BRVM.
+    - cron: "30 18 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: collecte-brvm-quotidienne
+  cancel-in-progress: false
+
+jobs:
+  collecte:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ENVIRONNEMENT: production
+      ACTIVER_BASE_DE_DONNEES: "true"
+      BASE_DE_DONNEES_URL: ${{ secrets.BRVM_DATABASE_URL }}
+      NIVEAU_JOURNALISATION: INFO
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installer le collecteur et PostgreSQL
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[database]"
+
+      - name: Collecter et enregistrer les cours BRVM
+        run: python scripts/lancer_pipeline.py
